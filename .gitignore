@@ -1,0 +1,64 @@
+# === Node ===
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.npm
+.npmrc
+
+# === CDK ===
+cdk.out/
+.cdk.staging/
+*.tsbuildinfo
+
+# === TypeScript build output ===
+# CDK compiles .ts to .js next to the source files
+**/*.js
+**/*.d.ts
+!jest.config.js
+!**/jest.config.js
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# === Environment / secrets ===
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.p12
+
+# === AWS ===
+.aws-sam/
+.aws/
+
+# === IDE ===
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === Logs ===
+*.log
+logs/
+
+# === Test artifacts ===
+coverage/
+.nyc_output/
