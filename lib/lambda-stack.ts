@@ -4,117 +4,65 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 import * as path from 'path';
 
-interface ToolConfig {
-  name: string;
-  managedPolicies: string[];
-  inlinePolicies?: { [key: string]: iam.PolicyDocument };
-}
-
 export class LambdaStack extends cdk.Stack {
-  public readonly toolFunctions: { [key: string]: lambda.Function } = {};
+  public readonly toolFunction: lambda.Function;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const tools: ToolConfig[] = [
-      {
-        name: 'cost_query',
-        managedPolicies: ['AWSBillingReadOnlyAccess'],
+    this.toolFunction = new lambda.Function(this, 'UnifiedToolsFn', {
+      functionName: 'aws-agent-tools',
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: 'index.lambda_handler',
+      code: lambda.Code.fromAsset(
+        path.join(__dirname, '../lambda/tools/unified')
+      ),
+      timeout: cdk.Duration.seconds(60),
+      memorySize: 512,
+      environment: {
+        LOG_LEVEL: 'INFO',
       },
-      {
-        name: 'cost_forecast',
-        managedPolicies: ['AWSBillingReadOnlyAccess'],
-        inlinePolicies: {
-          CostForecast: new iam.PolicyDocument({
-            statements: [
-              new iam.PolicyStatement({
-                actions: ['ce:GetCostForecast'],
-                resources: ['*'],
-              }),
-            ],
-          }),
-        },
-      },
-      {
-        name: 's3_audit',
-        managedPolicies: ['AmazonS3ReadOnlyAccess'],
-      },
-      {
-        name: 'iam_summary',
-        managedPolicies: ['IAMReadOnlyAccess'],
-      },
-      {
-        name: 'ec2_inventory',
-        managedPolicies: ['AmazonEC2ReadOnlyAccess'],
-      },
-      {
-        name: 'security_posture',
-        managedPolicies: ['IAMReadOnlyAccess'],
-      },
-      {
-        name: 'sg_audit',
-        managedPolicies: ['AmazonEC2ReadOnlyAccess'],
-      },
-      {
-        name: 'cloudtrail_recent',
-        managedPolicies: [],
-        inlinePolicies: {
-          CloudTrailLookup: new iam.PolicyDocument({
-            statements: [
-              new iam.PolicyStatement({
-                actions: ['cloudtrail:LookupEvents'],
-                resources: ['*'],
-              }),
-            ],
-          }),
-        },
-      },
+      description: 'Unified tool Lambda for the AWS account Bedrock Agent',
+    });
+
+    const managedPolicies = [
+      'AWSBillingReadOnlyAccess',
+      'AmazonS3ReadOnlyAccess',
+      'IAMReadOnlyAccess',
+      'AmazonEC2ReadOnlyAccess',
     ];
 
-    for (const tool of tools) {
-      const fn = new lambda.Function(this, `${tool.name}Fn`, {
-        functionName: `aws-agent-${tool.name}`,
-        runtime: lambda.Runtime.PYTHON_3_12,
-        handler: 'index.lambda_handler',
-        code: lambda.Code.fromAsset(
-          path.join(__dirname, `../lambda/tools/${tool.name}`)
-        ),
-        timeout: cdk.Duration.seconds(30),
-        memorySize: 256,
-        environment: {
-          LOG_LEVEL: 'INFO',
-        },
-        description: `AWS account agent tool: ${tool.name}`,
-      });
-
-      for (const policy of tool.managedPolicies) {
-        fn.role?.addManagedPolicy(
-          iam.ManagedPolicy.fromAwsManagedPolicyName(policy)
-        );
-      }
-
-      if (tool.inlinePolicies) {
-        for (const [policyName, doc] of Object.entries(tool.inlinePolicies)) {
-          fn.role?.attachInlinePolicy(
-            new iam.Policy(this, `${tool.name}-${policyName}`, {
-              policyName: policyName,
-              document: doc,
-            })
-          );
-        }
-      }
-
-      fn.addPermission(`BedrockInvoke-${tool.name}`, {
-        principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
-        action: 'lambda:InvokeFunction',
-      });
-
-      this.toolFunctions[tool.name] = fn;
-
-      new cdk.CfnOutput(this, `${tool.name}Arn`, {
-        value: fn.functionArn,
-        description: `ARN of the ${tool.name} Lambda`,
-      });
+    for (const policy of managedPolicies) {
+      this.toolFunction.role?.addManagedPolicy(
+        iam.ManagedPolicy.fromAwsManagedPolicyName(policy)
+      );
     }
+
+    this.toolFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ce:GetCostForecast'],
+        resources: ['*'],
+      })
+    );
+
+    this.toolFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['cloudtrail:LookupEvents'],
+        resources: ['*'],
+      })
+    );
+
+    this.toolFunction.addPermission('BedrockInvoke', {
+      principal: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+      action: 'lambda:InvokeFunction',
+    });
+
+    new cdk.CfnOutput(this, 'ToolFunctionArn', {
+      value: this.toolFunction.functionArn,
+    });
+
+    new cdk.CfnOutput(this, 'ToolFunctionName', {
+      value: this.toolFunction.functionName,
+    });
   }
 }
